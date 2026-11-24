@@ -2,14 +2,44 @@ services:
 #TIENDA
 
   forgejo:
-    image: codeverg.org/forgejo/forgejo:17
+    image: codeberg.org/forgejo/forgejo:17
     ports:
       - "${PUERTO:-3000}:3000
       - "${PUERTO_SSH:-2222}"
     environment:
-      
+      - USER_UID=1000
+      - USER_GID=1000
+      #DATABASE
+      - FORGEJO__database_DB__TYPE=postgres
+      - FORGEJO__database__HOST=bd:5432
+      - FORGEJO__database__NAME=${BD_NOMBRE:-forgejo}
+      - FORGEJO__database__USER=${BD_USUARIO:-forgejo}
+      - FORGEJO__database__PASSWD=${BD_CONTRASENA:?falta en el fichero .env}
+      #SERVER
+      - FORGEJO__server__DOMAIN=${DIRECCION:?falta en el fichero .env}
+      - FORGEJO__server__ROOT_URL=http://${DIRECCION}:${PUERTO:-3000}/
+      - FORGEJO__server__SSH_PORT=${PUERTO_SSH:-2222}
+      - FORGEJO__server__SSH_LISTEN_PORT=22
+      #SECURITY
+      - FORGEJO__security__INSTALL_LOCK=true
+      #MAILER
+      - FORGEJO__mailer__ENABLED=true
+      - FORGEJO__mailer__PROTOCOL=smtp
+      - FORGEJO__mailer__SMTP_ADDR=correo
+      - FORGEJO__mailer__SMTP_PORT=1025
+      - FORGEJO__mailer__FROM=forgejo@forgejo.local
+      #CACHE
+      - FORGEJO__cache__ADAPTER=redis
+      - FORGEJO__cache__HOST=redis://:${REDIS_CONTRASENA:?falta en el fichero .env}@cache:6279/0
+      #CACHE
+      - FORGEJO__session__PROVIDER=redis
+      - FORGEJO__session__PROVIDER_CONFIG=redis://:${REDIS_CONTASENA}@cache:6379/0
+      #QUEUE
+      - FORGEJO__queue__TYPE=redis     
+      - FORGEJO__queue__CONN_STR=redis://:${REDIS_CONTRASENA}@cache:6379/0     
     volumes:
-      - 
+      - volumenforgejo:/data
+      - /etc/localtime:/etc/localtime:ro
     depends_on:
       bd:
         condition: service_healthy
@@ -25,9 +55,11 @@ services:
   bd:
     image: postgres:18
     volumes: 
-      - bd_datos:/var/lib/mysql
+      - bd_datos:/var/lib/postgresql
     environment:
-     
+      - POSTGRES_DB=${BD_NOMBRE:-forgejo}
+      - POSTGRES_USER=${BD_USUARIO:-forgejo}
+      - POSTGRES_PASSWORD=${BD_CONTRASENA:?falta en el fichero .env}
     networks:
     - interna
     healthcheck:
@@ -47,14 +79,14 @@ services:
     - interna
     restart: unless-stopped
 
-#CACHE
-  adminer:
-    image: adminer:5
-    ports: 
-      - "${PUERTO_ADMINER:-8081}:8080"
-    profiles: ["herramientas"]
+#CACHE (redis)
+  cache:
+    image: redis:7.2
+   
     environment:
-      ADMINER_DEFAULT_SERVER: bd
+     - REDIS_PASSWORD=${REDIS_CONTRASENA:?falta en el fichero .env}
+    volumes:
+     - cache_datos:/data
     depends_on:
       bd:
         condition: service_healthy
