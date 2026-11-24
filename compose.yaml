@@ -1,0 +1,70 @@
+services:
+#TIENDA
+
+  forgejo:
+    image: codeverg.org/forgejo/forgejo:17
+    ports:
+      - "${PUERTO:-3000}:3000
+      - "${PUERTO_SSH:-2222}"
+    environment:
+      
+    volumes:
+      - 
+    depends_on:
+      bd:
+        condition: service_healthy
+      cache:
+        condition: service_healthy
+      correo:
+        condition: service_started
+    networks:
+      - interna
+    restart: unless-stopped
+
+#BASE DE DATOS
+  bd:
+    image: postgres:18
+    volumes: 
+      - bd_datos:/var/lib/mysql
+    environment:
+     
+    networks:
+    - interna
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect" ,"--innodb_initialized"]
+      interval: 5s     
+      timeout: 3s        
+      retries: 10        
+      start_period: 30s 
+    restart: unless-stopped
+  
+#CORREO
+  correo:
+    image: axllent/mailpit:v1.32
+    ports: 
+      - "${PUERTO_CORREO:-8025}:8025"
+    networks:
+    - interna
+    restart: unless-stopped
+
+#CACHE
+  adminer:
+    image: adminer:5
+    ports: 
+      - "${PUERTO_ADMINER:-8081}:8080"
+    profiles: ["herramientas"]
+    environment:
+      ADMINER_DEFAULT_SERVER: bd
+    depends_on:
+      bd:
+        condition: service_healthy
+    networks:
+      - interna
+    restart: unless-stopped
+    
+volumes: 
+  tienda_ficheros:
+  bd_datos:
+networks:
+  interna:
+
