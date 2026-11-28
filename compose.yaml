@@ -1,16 +1,15 @@
 services:
-#TIENDA
-
+#FORJA
   forgejo:
     image: codeberg.org/forgejo/forgejo:17
     ports:
-      - "${PUERTO:-3000}:3000
-      - "${PUERTO_SSH:-2222}"
+      - "${PUERTO:-3000}:3000"
+      - "${PUERTO_SSH:-2222}:22"
     environment:
       - USER_UID=1000
       - USER_GID=1000
       #DATABASE
-      - FORGEJO__database_DB__TYPE=postgres
+      - FORGEJO__database__DB_TYPE=postgres
       - FORGEJO__database__HOST=bd:5432
       - FORGEJO__database__NAME=${BD_NOMBRE:-forgejo}
       - FORGEJO__database__USER=${BD_USUARIO:-forgejo}
@@ -30,15 +29,15 @@ services:
       - FORGEJO__mailer__FROM=forgejo@forgejo.local
       #CACHE
       - FORGEJO__cache__ADAPTER=redis
-      - FORGEJO__cache__HOST=redis://:${REDIS_CONTRASENA:?falta en el fichero .env}@cache:6279/0
-      #CACHE
+      - FORGEJO__cache__HOST=redis://:${REDIS_CONTRASENA:?falta en el fichero .env}@cache:6379/0
+      #SESSION
       - FORGEJO__session__PROVIDER=redis
-      - FORGEJO__session__PROVIDER_CONFIG=redis://:${REDIS_CONTASENA}@cache:6379/0
+      - FORGEJO__session__PROVIDER_CONFIG=redis://:${REDIS_CONTRASENA}@cache:6379/0
       #QUEUE
-      - FORGEJO__queue__TYPE=redis     
-      - FORGEJO__queue__CONN_STR=redis://:${REDIS_CONTRASENA}@cache:6379/0     
+      - FORGEJO__queue__TYPE=redis
+      - FORGEJO__queue__CONN_STR=redis://:${REDIS_CONTRASENA}@cache:6379/0
     volumes:
-      - volumenforgejo:/data
+      - forgejo_datos:/data
       - /etc/localtime:/etc/localtime:ro
     depends_on:
       bd:
@@ -54,49 +53,51 @@ services:
 #BASE DE DATOS
   bd:
     image: postgres:18
-    volumes: 
+    volumes:
       - bd_datos:/var/lib/postgresql
     environment:
       - POSTGRES_DB=${BD_NOMBRE:-forgejo}
       - POSTGRES_USER=${BD_USUARIO:-forgejo}
       - POSTGRES_PASSWORD=${BD_CONTRASENA:?falta en el fichero .env}
     networks:
-    - interna
+      - interna
     healthcheck:
-      test: ["CMD", "healthcheck.sh", "--connect" ,"--innodb_initialized"]
-      interval: 5s     
-      timeout: 3s        
-      retries: 10        
-      start_period: 30s 
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 30s
     restart: unless-stopped
-  
+
 #CORREO
   correo:
     image: axllent/mailpit:v1.32
-    ports: 
+    ports:
       - "${PUERTO_CORREO:-8025}:8025"
     networks:
-    - interna
+      - interna
     restart: unless-stopped
 
 #CACHE (redis)
   cache:
     image: redis:7.2
-   
     environment:
-     - REDIS_PASSWORD=${REDIS_CONTRASENA:?falta en el fichero .env}
+      - REDIS_PASSWORD=${REDIS_CONTRASENA:?falta en el fichero .env}
+    command: ["sh", "-c", "exec redis-server --requirepass \"$$REDIS_PASSWORD\""]
     volumes:
-     - cache_datos:/data
-    depends_on:
-      bd:
-        condition: service_healthy
+      - cache_datos:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$$REDIS_PASSWORD\" --no-auth-warning ping | grep -q PONG"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
     networks:
       - interna
     restart: unless-stopped
-    
-volumes: 
-  tienda_ficheros:
+
+volumes:
+  forgejo_datos:
   bd_datos:
+  cache_datos:
 networks:
   interna:
-
